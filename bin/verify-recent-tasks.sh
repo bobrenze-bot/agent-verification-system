@@ -5,7 +5,7 @@
 set -euo pipefail  # Exit on error, undefined vars, pipe failures
 
 # === Environment Validation ===
-for cmd in find grep sed date md5 yq; do
+for cmd in find grep sed date shasum; do
     if ! command -v "$cmd" &>/dev/null; then
         echo "FATAL: Required command '$cmd' not found in PATH" >&2
         exit 127
@@ -32,11 +32,16 @@ done
 
 # === Lockfile (prevent concurrent executions) ===
 LOCKFILE="/tmp/verify-recent-tasks.lock"
-exec 200>"$LOCKFILE"
-if ! flock -n 200; then
-    echo "Verifier already running" >&2
-    exit 0
+if [ -f "$LOCKFILE" ]; then
+    LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null)
+    if ps -p "$LOCK_PID" > /dev/null 2>&1; then
+        echo "Verifier already running (PID: $LOCK_PID)" >&2
+        exit 0
+    fi
 fi
+echo $$ > "$LOCKFILE"
+# Cleanup lock on exit
+trap 'rm -f "$LOCKFILE"' EXIT
 
 # === Begin Verification ===
 echo "=== TASK VERIFICATION RUN: $TIMESTAMP ===" | tee -a "$LOG_FILE"
@@ -135,12 +140,17 @@ for artifact in $RECENT_ARTIFACTS; do
                     break
                 fi
                 
-                # Verify checksum if present
-                if [ -n "$OUTPUT_CHECKSUM" ] && [[ "$OUTPUT_CHECKSUM" == md5:* ]]; then
-                    EXPECTED_CHECKSUM=${OUTPUT_CHECKSUM#md5:}
-                    ACTUAL_CHECKSUM=$(md5 -q "$OUTPUT_PATH" 2>/dev/null || echo "")
+                # Verify checksum if present (supports shasum256 or md5 format)
+                if [ -n "$OUTPUT_CHECKSUM" ]; then
+                    if [[ "$OUTPUT_CHECKSUM" == sha256:* ]]; then
+                        EXPECTED_CHECKSUM=${OUTPUT_CHECKSUM#sha256:}
+                        ACTUAL_CHECKSUM=$(shasum -a 256 "$OUTPUT_PATH" 2>/dev/null | awk '{print $1}' || echo "")
+                    elif [[ "$OUTPUT_CHECKSUM" == md5:* ]]; then
+                        EXPECTED_CHECKSUM=${OUTPUT_CHECKSUM#md5:}
+                        ACTUAL_CHECKSUM=$(md5 -q "$OUTPUT_PATH" 2>/dev/null || echo "")
+                    fi
                     
-                    if [ "$ACTUAL_CHECKSUM" != "$EXPECTED_CHECKSUM" ]; then
+                    if [ -n "$EXPECTED_CHECKSUM" ] && [ "$ACTUAL_CHECKSUM" != "$EXPECTED_CHECKSUM" ]; then
                         echo "FAIL: Checksum mismatch for $OUTPUT_PATH" | tee -a "$LOG_FILE"
                         echo "  Expected: $EXPECTED_CHECKSUM" | tee -a "$LOG_FILE"
                         echo "  Actual:   $ACTUAL_CHECKSUM" | tee -a "$LOG_FILE"
@@ -179,8 +189,10 @@ artifacts_failed: $ARTIFACTS_FAILED
 failed_tasks:
 EOF
 
-for failed in "${FAILED_TASKS[@]}"; do
-    echo "  - $failed" >> "$VERIFIER_ARTIFACT"
+for failed in "${FAILED_TASKS[@]:-}"; do
+    if [ -n "$failed" ]; then
+        echo "  - $failed" >> "$VERIFIER_ARTIFACT"
+    fi
 done
 
 echo "=== VERIFICATION COMPLETE ===" | tee -a "$LOG_FILE"

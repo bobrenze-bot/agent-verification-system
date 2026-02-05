@@ -2,7 +2,7 @@
 # Tier 3: Meta-Monitor (V2 - with Verifier Verification & Human Escalation)
 # FIXES: FM-1 (Checks verifier itself), FM-5 (Human escalation), FM-6 (Temporal coupling)
 
-set -euo pipefail
+set -uo pipefail  # Note: removed -e to handle expected empty results
 
 WORKSPACE="/Users/serenerenze/bob-bootstrap"
 OPERATIONAL_DIR="$WORKSPACE/OPERATIONAL"

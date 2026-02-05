@@ -1,0 +1,12 @@
+# Verification System Cron Jobs
+# Install: crontab verification-crontab.txt
+# Added: 2026-02-05
+
+# Task Verifier - runs every 10 minutes
+*/10 * * * * cd /Users/serenerenze/bob-bootstrap/OPERATIONAL && bash verify-recent-tasks.sh >> /tmp/verifier-cron.log 2>&1
+
+# Queue Sync - runs every 15 minutes  
+*/15 * * * * cd /Users/serenerenze/bob-bootstrap && python3 OPERATIONAL/queue-sync-artifacts.py >> /tmp/queue-sync-cron.log 2>&1
+
+# Meta-Monitor - runs every 30 minutes
+*/30 * * * * cd /Users/serenerenze/bob-bootstrap && bash OPERATIONAL/meta-monitor/check-system-health.sh >> /tmp/meta-monitor-cron.log 2>&1
