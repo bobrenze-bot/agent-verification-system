@@ -1,0 +1,9 @@
+# Example task with verification
+id: "TASK_001"
+task: "Write chapter summary"
+status: pending
+completion_signal: "TASK_001_COMPLETE: Chapter summary written"
+verification:
+  - "File exists at specified path"
+  - "File contains >100 lines"
+  - "YAML frontmatter valid"

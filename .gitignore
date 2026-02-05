@@ -1,0 +1,4 @@
+*.log
+/completion-artifacts/
+/verification-logs/
+*.lock
