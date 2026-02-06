@@ -11,9 +11,13 @@ import re
 from datetime import datetime, timedelta
 from pathlib import Path
 
-QUEUE_FILE = "/Users/serenerenze/bob-bootstrap/autonomous-queue.yaml"
-ARTIFACT_DIR = "/Users/serenerenze/bob-bootstrap/OPERATIONAL/completion-artifacts"
-BLOCKED_LOG = "/Users/serenerenze/bob-bootstrap/BLOCKERS.md"
+# Configurable paths via env (defaults to current working directory)
+import os
+
+WORKSPACE = os.environ.get("AVS_WORKSPACE", str(Path.cwd()))
+QUEUE_FILE = os.environ.get("AVS_QUEUE_FILE", str(Path(WORKSPACE) / "autonomous-queue.yaml"))
+ARTIFACT_DIR = os.environ.get("AVS_ARTIFACT_DIR", str(Path(WORKSPACE) / "OPERATIONAL" / "completion-artifacts"))
+BLOCKED_LOG = os.environ.get("AVS_BLOCKERS_FILE", str(Path(WORKSPACE) / "BLOCKERS.md"))
 
 def load_queue():
     """Load and parse the autonomous queue"""

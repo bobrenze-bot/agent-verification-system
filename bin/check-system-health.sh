@@ -4,9 +4,10 @@
 
 set -uo pipefail  # Note: removed -e to handle expected empty results
 
-WORKSPACE="/Users/serenerenze/bob-bootstrap"
-OPERATIONAL_DIR="$WORKSPACE/OPERATIONAL"
-LOG_DIR="$OPERATIONAL_DIR/meta-monitor"
+source "$(dirname "$0")/../lib/paths.sh"
+WORKSPACE="$AVS_WORKSPACE"
+OPERATIONAL_DIR="$AVS_OPERATIONAL_DIR"
+LOG_DIR="$AVS_META_MONITOR_DIR"
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 TIMESTAMP_FILE=$(date -u +"%Y%m%d_%H%M%S")
 ALERT_FILE="$LOG_DIR/ALERT_$TIMESTAMP_FILE.txt"
@@ -184,41 +185,18 @@ else
     echo "$TIMESTAMP: ALERT_RAISED - $ISSUES issue(s)" >> "$LOG_DIR/health.log"
     echo "escalated_at: $TIMESTAMP" >> "$ALERT_FILE"
     
-    # === Human Escalation (NEW) ===
-    # Try to send alert via OpenClaw message tool
-    
-    # Create summary for message (first 500 chars)
-    SUMMARY=$(head -20 "$ALERT_FILE" | head -c 500)
-    
-    # Check if openclaw message tool is available
-    if command -v openclaw >/dev/null 2>&1; then
-        # Attempt to send Telegram alert to Matthew
-        # (Adjust target based on who should receive alerts)
-        MESSAGE="🚨 VERIFICATION SYSTEM ALERT
+    # === Escalation Hook (Optional) ===
+    # Default behavior: write alert file and exit nonzero (cron can email).
+    # If you want external alerting (Slack/Telegram/etc), set AVS_ALERT_HOOK.
+    # Hook will be called as: AVS_ALERT_HOOK=<cmd> where <cmd> receives ALERT_FILE in $ALERT_FILE.
 
-$ISSUES issue(s) detected at $TIMESTAMP
-
-$SUMMARY
-
-Full report: $ALERT_FILE"
-        
-        # Try to send message (may fail if credentials not set up)
-        if openclaw message send \
-            --channel=telegram \
-            --target="@matthewrenze" \
-            --message="$MESSAGE" \
-            --silent \
-            2>/dev/null; then
-            echo "✓ Alert sent via Telegram" >> "$ALERT_FILE"
-        else
-            echo "⚠️  Failed to send Telegram alert - credentials may be missing" >> "$ALERT_FILE"
-        fi
-    else
-        echo "⚠️  openclaw CLI not available - cannot send alert" >> "$ALERT_FILE"
+    if [ -n "$AVS_ALERT_HOOK" ]; then
+        echo "Invoking AVS_ALERT_HOOK: $AVS_ALERT_HOOK" >> "$ALERT_FILE"
+        ALERT_FILE="$ALERT_FILE" ISSUES="$ISSUES" TIMESTAMP="$TIMESTAMP" bash -lc "$AVS_ALERT_HOOK" >> "$ALERT_FILE" 2>&1 || true
     fi
-    
-    # Always output alert to stdout (cron can email this)
+
+    # Always output alert to stdout
     cat "$ALERT_FILE"
-    
+
     exit 1
 fi

@@ -1,12 +1,26 @@
-# Verification System Cron Jobs
-# Install: crontab verification-crontab.txt
-# Added: 2026-02-05
+# Agent Verification System (AVS) — System Cron Template
+# Install:
+#   1) Edit AVS_HOME below to your clone path
+#   2) crontab verification-crontab.txt
+#
+# Notes:
+# - This schedules Tier 0 (executor) + Tier 2 (verifier) + Tier 3 (meta-monitor).
+# - For OpenClaw users, prefer OpenClaw cron config in deployment/OPENCLAW-CRON-CONFIG.md.
+#
+# Configure your install location (REQUIRED)
+AVS_HOME=/path/to/agent-verification-system
 
-# Task Verifier - runs every 10 minutes
-*/10 * * * * cd /Users/serenerenze/bob-bootstrap/OPERATIONAL && bash verify-recent-tasks.sh >> /tmp/verifier-cron.log 2>&1
+# Optional: integrate with an external workspace that contains autonomous-queue.yaml
+# AVS_WORKSPACE=/path/to/your/workspace
 
-# Queue Sync - runs every 15 minutes  
-*/15 * * * * cd /Users/serenerenze/bob-bootstrap && python3 OPERATIONAL/queue-sync-artifacts.py >> /tmp/queue-sync-cron.log 2>&1
+# Tier 0: Queue Executor (every 20 minutes)
+*/20 * * * * cd $AVS_HOME && bash bin/queue-executor.sh >> /tmp/avs-executor-cron.log 2>&1
 
-# Meta-Monitor - runs every 30 minutes
-*/30 * * * * cd /Users/serenerenze/bob-bootstrap && bash OPERATIONAL/meta-monitor/check-system-health.sh >> /tmp/meta-monitor-cron.log 2>&1
+# Tier 2: Task Verifier (every 10 minutes)
+*/10 * * * * cd $AVS_HOME && bash bin/verify-recent-tasks.sh >> /tmp/avs-verifier-cron.log 2>&1
+
+# Queue Sync (every 15 minutes)
+*/15 * * * * cd $AVS_HOME && python3 lib/queue-sync-artifacts.py >> /tmp/avs-queue-sync-cron.log 2>&1
+
+# Tier 3: Meta-Monitor (every 30 minutes)
+*/30 * * * * cd $AVS_HOME && bash bin/check-system-health.sh >> /tmp/avs-meta-monitor-cron.log 2>&1

@@ -13,10 +13,11 @@ for cmd in find grep sed date shasum; do
 done
 
 # === Configuration ===
-WORKSPACE="/Users/serenerenze/bob-bootstrap"
-ARTIFACT_DIR="$WORKSPACE/OPERATIONAL/completion-artifacts"
-LOG_DIR="$WORKSPACE/OPERATIONAL/verification-logs"
-VERIFIER_DIR="$WORKSPACE/OPERATIONAL/verifier-completions"
+source "$(dirname "$0")/../lib/paths.sh"
+WORKSPACE="$AVS_WORKSPACE"
+ARTIFACT_DIR="$AVS_ARTIFACT_DIR"
+LOG_DIR="$AVS_VERIFICATION_LOG_DIR"
+VERIFIER_DIR="$AVS_VERIFIER_COMPLETIONS_DIR"
 TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
 LOG_FILE="$LOG_DIR/verification_$TIMESTAMP.log"
 VERIFIER_ARTIFACT="$VERIFIER_DIR/verify_$TIMESTAMP.yaml"

@@ -1,0 +1,10 @@
+tasks:
+  - id: 1
+    task: "Write chapter summary"
+    status: pending
+    priority: high
+    added: "2026-02-06T00:00:00Z"
+    completion_signal: "TASK_1_COMPLETE: Chapter summary written"
+    verification:
+      - "Output file exists"
+      - "Output file has >100 lines"

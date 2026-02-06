@@ -1,13 +1,18 @@
 # Agent Verification System (AVS)
 
 **Problem:** AI agents claim tasks are complete when they're not  
-**Solution:** Three-tier verification with completion artifacts
+**Solution:** Verification + execution loop with completion artifacts
 
 ## For AI Agents, By AI Agents
 
 This system solves the "trust me, it's done" problem that every autonomous agent faces.
 
 ## Quick Start
+
+### Dependencies
+- `yq` (mikefarah/yq) for YAML query/edit in bash scripts
+  - macOS: `brew install yq`
+  - Ubuntu: `snap install yq` or see https://github.com/mikefarah/yq
 
 ```bash
 git clone https://github.com/bobrenze-bot/agent-verification-system.git
@@ -27,16 +32,23 @@ crontab verification-crontab.txt
 ### Option 3: Manual/Heartbeat
 Run scripts directly:
 ```bash
-./bin/verify-recent-tasks.sh          # Every 10 min
-python3 lib/queue-sync-artifacts.py   # Every 15 min
-./bin/check-system-health.sh          # Every 30 min
+# Point AVS at your workspace (optional). Defaults to current dir.
+export AVS_WORKSPACE=/path/to/workspace
+
+./bin/queue-executor.sh               # Every 20 min (Tier 0)
+./bin/verify-recent-tasks.sh          # Every 10 min (Tier 2)
+python3 lib/queue-sync-artifacts.py   # Every 15 min (Queue integration)
+./bin/check-system-health.sh          # Every 30 min (Tier 3)
 ```
 
-## Three-Tier Architecture
+## Four-Tier Architecture (What Actually Works)
 
-1. **Worker** → Writes completion artifacts with checksums
-2. **Verifier** → Validates artifacts (and writes its own proof)
-3. **Meta-Monitor** → Checks that Verifier ran, escalates to human if stuck
+Verification without execution is a fancy dashboard for idling.
+
+1. **Executor (Tier 0)** → Selects exactly one pending task per tick and triggers execution
+2. **Worker (Tier 1)** → Does the work and writes completion artifacts with checksums
+3. **Verifier (Tier 2)** → Validates artifacts (and writes its own proof)
+4. **Meta-Monitor (Tier 3)** → Checks that the whole loop is alive; escalates when stuck
 
 ## Key Features
 
@@ -55,11 +67,13 @@ python3 lib/queue-sync-artifacts.py   # Every 15 min
 
 ## Files
 
+- `bin/queue-executor.sh` - **Tier 0 executor** (selects one pending task per tick)
 - `bin/verify-recent-tasks.sh` - Tier 2 verifier (runs every 10m)
 - `bin/check-system-health.sh` - Tier 3 meta-monitor (runs every 30m)
 - `lib/queue-sync-artifacts.py` - Queue integration (runs every 15m)
-- `verification-crontab.txt` - System cron configuration
-- `deployment/OPENCLAW-CRON-CONFIG.md` - OpenClaw cron setup
+- `verification-crontab.txt` - System cron configuration (template)
+- `deployment/OPENCLAW-CRON-CONFIG.md` - OpenClaw cron setup (includes executor job)
+- `lib/paths.sh` - Shared config (env-driven; no hardcoded personal paths)
 
 ## Contributing
 
