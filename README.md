@@ -60,6 +60,8 @@ Verification without execution is a fancy dashboard for idling.
 
 ## Why This Matters
 
+- 📄 Read: `docs/WHY-VERIFICATION-ONLY-IDLES.md` — explains the common failure mode where crons fire and logs update but no real work executes (and how Tier 0 fixes it).
+
 - No more false "TASK_COMPLETE" claims
 - Detect stuck work automatically (2-hour timeout)
 - Human escalation when things break
