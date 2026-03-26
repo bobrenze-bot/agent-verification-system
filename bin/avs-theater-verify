@@ -1,0 +1,91 @@
+#!/bin/bash
+# AVS Theater Pattern Verifier
+# Integration between AVS and verify-checklist.py for theater pattern detection
+#
+# This script runs as part of Tier 2 verification and checks deliverables
+# for theater patterns before they can be marked complete.
+#
+# Usage: avs-theater-verify <deliverable-path> [task-id]
+
+set -euo pipefail
+
+source "$(dirname "$0")/../lib/paths.sh"
+source "$(dirname "$0")/../avs-production.env" 2>/dev/null || true
+
+THEATER_CHECKLIST="${AVS_THEATER_CHECKLIST:-$AVS_WORKSPACE/shared/BUILT_COMPONENTS/verify-checklist-fixed/verify-checklist.py}"
+DELIVERABLE="${1:-}"
+TASK_ID="${2:-}"
+TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+
+if [ -z "$DELIVERABLE" ]; then
+    echo "Usage: avs-theater-verify <deliverable-path> [task-id]"
+    exit 1
+fi
+
+if [ ! -f "$DELIVERABLE" ]; then
+    echo "ERROR: Deliverable not found: $DELIVERABLE"
+    exit 1
+fi
+
+if [ ! -f "$THEATER_CHECKLIST" ]; then
+    echo "ERROR: Theater checklist not found: $THEATER_CHECKLIST"
+    exit 1
+fi
+
+# Run theater pattern detection
+echo "=== Theater Pattern Verification ==="
+echo "File: $DELIVERABLE"
+echo "Task: ${TASK_ID:-N/A}"
+echo "Timestamp: $TIMESTAMP"
+echo ""
+
+# Execute verify-checklist.py
+CHECK_OUTPUT=$(python3 "$THEATER_CHECKLIST" "$DELIVERABLE" 2>&1) || CHECK_EXIT=$?
+CHECK_EXIT=${CHECK_EXIT:-0}
+
+# Parse results
+if [ "$CHECK_EXIT" -eq 0 ]; then
+    THEATER_STATUS="PASS"
+    echo "✓ Theater patterns: NONE DETECTED"
+    echo "✓ Deliverable verified and ready for delivery"
+else
+    THEATER_COUNT=$(echo "$CHECK_OUTPUT" | grep -c "THEATER" || echo "0")
+    if [ "$THEATER_COUNT" -gt 0 ]; then
+        THEATER_STATUS="FAIL"
+        echo "✗ Theater patterns detected: $THEATER_COUNT"
+        echo ""
+        echo "$CHECK_OUTPUT" | grep -A 2 "THEATER"
+    else
+        THEATER_STATUS="WARNING"
+        echo "⚠ Verification exited with warnings"
+    fi
+fi
+
+# Write verification artifact for AVS integration
+if [ -n "$TASK_ID" ]; then
+    ARTIFACT_FILE="$AVS_ARTIFACT_DIR/TASK_${TASK_ID}_theater_${TIMESTAMP}.yaml"
+    mkdir -p "$AVS_ARTIFACT_DIR"
+    
+    cat > "$ARTIFACT_FILE" <<EOF
+---
+task_id: $TASK_ID
+verification_type: theater_pattern_check
+status: $([[ "$THEATER_STATUS" == "PASS" ]] && echo "complete" || echo "failed")
+timestamp_start: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+timestamp_end: "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+theater_patterns_found: $THEATER_COUNT
+theater_status: "$THEATER_STATUS"
+deliverable_path: "$DELIVERABLE"
+verify_checklist_exit_code: $CHECK_EXIT
+outputs:
+  - type: artifact
+    path: "$ARTIFACT_FILE"
+    checksum: "$(shasum -a 256 "$ARTIFACT_FILE" 2>/dev/null | awk '{print $1}' || echo 'unknown')"
+EOF
+    
+    echo ""
+    echo "Verification artifact: $ARTIFACT_FILE"
+fi
+
+# Exit with same code as verify-checklist.py
+exit $CHECK_EXIT

@@ -1,0 +1,86 @@
+#!/bin/bash
+# AVS Theater Pattern Batch Scanner
+# Scans all recent completion artifacts for theater patterns
+#
+# This is called by cron every 15 minutes as part of Tier 2 verification
+
+set -euo pipefail
+
+source "$(dirname "$0")/../lib/paths.sh"
+source "$(dirname "$0")/../avs-production.env" 2>/dev/null || true
+
+THEATER_CHECKLIST="${AVS_THEATER_CHECKLIST:-$AVS_WORKSPACE/shared/BUILT_COMPONENTS/verify-checklist-fixed/verify-checklist.py}"
+TIMESTAMP=$(date -u +"%Y%m%d_%H%M%S")
+LOG_FILE="$AVS_VERIFICATION_LOG_DIR/theater-scan_$TIMESTAMP.log"
+REPORT_FILE="$AVS_META_MONITOR_DIR/theater-report-latest.txt"
+
+mkdir -p "$AVS_VERIFICATION_LOG_DIR" "$AVS_META_MONITOR_DIR"
+
+echo "=== Theater Pattern Scan: $TIMESTAMP ===" | tee -a "$LOG_FILE"
+
+# Find recent deliverables to scan (markdown files in work-completions, deliverables, etc)
+SCAN_DIRS=(
+    "$AVS_WORKSPACE/work-completions"
+    "$AVS_WORKSPACE/deliverables"
+)
+
+ARTIFACTS_SCANNED=0
+ARTIFACTS_WITH_THEATER=0
+THEATER_ISSUES=()
+
+for dir in "${SCAN_DIRS[@]}"; do
+    if [ ! -d "$dir" ]; then
+        continue
+    fi
+    
+    # Find recent files (modified in last 24 hours)
+    while IFS= read -r -d '' file; do
+        ARTIFACTS_SCANNED=$((ARTIFACTS_SCANNED + 1))
+        
+        echo "Scanning: $file" | tee -a "$LOG_FILE"
+        
+        # Run theater check
+        if python3 "$THEATER_CHECKLIST" "$file" >> "$LOG_FILE" 2>&1; then
+            echo "  ✓ No theater patterns" | tee -a "$LOG_FILE"
+        else
+            THEATER_COUNT=$(grep -c "THEATER" "$LOG_FILE" | tail -1 || echo "0")
+            if [ "$THEATER_COUNT" -gt 0 ]; then
+                ARTIFACTS_WITH_THEATER=$((ARTIFACTS_WITH_THEATER + 1))
+                THEATER_ISSUES+=("$file")
+                echo "  ✗ Theater patterns detected" | tee -a "$LOG_FILE"
+            fi
+        fi
+    done < <(find "$dir" -name "*.md" -mtime -1 -print0 2>/dev/null)
+done
+
+# Generate report
+cat > "$REPORT_FILE" <<EOF
+=== Theater Pattern Scan Report ===
+Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+Artifacts Scanned: $ARTIFACTS_SCANNED
+Artifacts with Theater Patterns: $ARTIFACTS_WITH_THEATER
+
+EOF
+
+if [ ${#THEATER_ISSUES[@]} -gt 0 ]; then
+    echo "Files with Theater Patterns:" >> "$REPORT_FILE"
+    for issue in "${THEATER_ISSUES[@]}"; do
+        echo "  - $issue" >> "$REPORT_FILE"
+    done
+    echo "" >> "$REPORT_FILE"
+    echo "Action Required: Review flagged deliverables before delivery" >> "$REPORT_FILE"
+fi
+
+echo "" | tee -a "$LOG_FILE"
+echo "=== Scan Complete ===" | tee -a "$LOG_FILE"
+echo "Artifacts scanned: $ARTIFACTS_SCANNED" | tee -a "$LOG_FILE"
+echo "With theater patterns: $ARTIFACTS_WITH_THEATER" | tee -a "$LOG_FILE"
+echo "Report: $REPORT_FILE" | tee -a "$LOG_FILE"
+
+# Exit with error if theater patterns found (for alerting)
+if [ $ARTIFACTS_WITH_THEATER -gt 0 ]; then
+    exit 1
+fi
+
+exit 0

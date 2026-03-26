@@ -1,0 +1,13 @@
+version: "1.0"
+last_updated: "2026-03-24T17:00:00Z"
+queue:
+  - id: 1
+    task: "Initialize AVS system"
+    status: "pending"
+    priority: "high"
+    created_at: "2026-03-24T17:00:00Z"
+    tier: 2
+    agent: "kai"
+    deliverable: "OPS_HEALTH.md update"
+
+completed: []

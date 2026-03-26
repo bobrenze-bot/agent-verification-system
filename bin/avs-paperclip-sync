@@ -1,0 +1,128 @@
+#!/bin/bash
+# AVS Paperclip Integration - Sync Paperclip issues to AVS queue
+#
+# This script polls Paperclip for in_progress tasks and syncs them
+to the autonomous-queue.yaml for AVS processing.
+
+set -euo pipefail
+
+source "$(dirname "$0")/../lib/paths.sh"
+source "$(dirname "$0")/../avs-production.env" 2>/dev/null || true
+
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+LOG_FILE="$AVS_META_MONITOR_DIR/paperclip-sync-$(date +%Y%m%d).log"
+
+mkdir -p "$AVS_META_MONITOR_DIR"
+
+# Paperclip API configuration
+PAPERCLIP_API_URL="${PAPERCLIP_API_URL:-http://localhost:3100}"
+PAPERCLIP_COMPANY_ID="${PAPERCLIP_COMPANY_ID:-d32e67ae-7ca7-4411-901e-7d564479bf94}"
+
+log() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') $1" | tee -a "$LOG_FILE"
+}
+
+log "=== Paperclip-AVS Sync: $TIMESTAMP ==="
+
+# Check if queue file exists, create if not
+if [ ! -f "$AVS_QUEUE_FILE" ]; then
+    log "Creating new queue file: $AVS_QUEUE_FILE"
+    cat > "$AVS_QUEUE_FILE" <<'EOF'
+tasks: []
+metadata:
+  created: '2026-03-23T00:00:00Z'
+  source: paperclip-avs-integration
+  initialized: true
+EOF
+fi
+
+# Fetch in_progress issues from Paperclip
+log "Fetching in_progress issues from Paperclip..."
+
+python3 << 'END_PYTHON'
+import urllib.request
+import json
+import os
+import sys
+import yaml
+from datetime import datetime
+
+api_url = os.environ.get("PAPERCLIP_API_URL", "http://localhost:3100")
+company_id = os.environ.get("PAPERCLIP_COMPANY_ID", "d32e67ae-7ca7-4411-901e-7d564479bf94")
+queue_file = os.environ.get("AVS_QUEUE_FILE", "/Users/serenerenze/bob-bootstrap/autonomous-queue.yaml")
+
+try:
+    # Fetch issues
+    url = f"{api_url}/api/companies/{company_id}/issues"
+    req = urllib.request.Request(url)
+    response = urllib.request.urlopen(req)
+    issues = json.loads(response.read())
+    
+    # Load current queue
+    with open(queue_file, 'r') as f:
+        queue = yaml.safe_load(f) or {'tasks': [], 'metadata': {}}
+    
+    existing_ids = {t.get('id') for t in queue.get('tasks', [])}
+    new_tasks = 0
+    
+    for issue in issues:
+        issue_id = issue.get('id', '').replace('-', '_')
+        status = issue.get('status', '')
+        
+        # Only sync active issues (in_progress, pending_review, todo with high priority)
+        if status not in ['in_progress', 'pending_review', 'todo']:
+            continue
+            
+        # Skip if already in queue
+        if issue_id in existing_ids:
+            # Update status if changed
+            for task in queue.get('tasks', []):
+                if task.get('id') == issue_id and task.get('status') != status:
+                    task['status'] = status
+                    task['updated_at'] = datetime.utcnow().isoformat() + 'Z'
+                    print(f"Updated task {issue_id} status to {status}")
+            continue
+        
+        # Determine priority
+        priority = 'medium'
+        if issue.get('priority') == 'high' or 'urgent' in issue.get('title', '').lower():
+            priority = 'high'
+        elif issue.get('priority') == 'low':
+            priority = 'low'
+        
+        # Add to queue
+        new_task = {
+            'id': issue_id,
+            'task': issue.get('title', 'Untitled'),
+            'description': issue.get('description', '')[:200],
+            'status': 'pending' if status == 'todo' else status,
+            'priority': priority,
+            'paperclip_issue_id': issue.get('id'),
+            'source': 'paperclip',
+            'created_at': datetime.utcnow().isoformat() + 'Z'
+        }
+        
+        queue['tasks'].append(new_task)
+        new_tasks += 1
+        print(f"Added task {issue_id}: {new_task['task']}")
+    
+    # Save queue
+    with open(queue_file, 'w') as f:
+        yaml.dump(queue, f, default_flow_style=False, sort_keys=False)
+    
+    print(f"\nSync complete: {new_tasks} new tasks added")
+    
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+END_PYTHON
+
+EXIT_CODE=$?
+
+if [ $EXIT_CODE -eq 0 ]; then
+    log "Sync completed successfully"
+else
+    log "ERROR: Sync failed with exit code $EXIT_CODE"
+fi
+
+exit $EXIT_CODE

@@ -1,0 +1,12 @@
+=== META-MONITOR HEALTH CHECK: 2026-03-24T05:23:06Z ===
+⚠️  ALERT: No worker artifacts in last 2 hours
+   Possible causes:
+   - No tasks scheduled
+   - Workers failing before writing artifacts
+   - System offline
+⚠️  ALERT: No verification logs in last 30 minutes
+   Expected: Verifier runs every 10 min via cron
+   Action: Check crontab, verify verifier script is executable
+🔴 CRITICAL: Verifier ran but produced no completion artifact
+   This means verifier itself is not being verified!
+   Action: Upgrade to verify-recent-tasks-v2.sh

@@ -1,0 +1,8 @@
+---
+verifier_run_id: "verify_20260310_220101"
+status: complete
+timestamp: "2026-03-10T22:01:01Z"
+artifacts_checked: 0
+artifacts_passed: 0
+artifacts_failed: 0
+failed_tasks:

@@ -1,0 +1,49 @@
+# AVS Production Crontab for bob-bootstrap
+# Integrates Agent Verification System with Paperclip workflow
+# 
+# INSTALLATION:
+#   1. Review all paths below and update if needed
+#   2. crontab avs-production-crontab.txt
+#   3. Verify logs in /tmp/avs-*
+#
+# ARCHITECTURE:
+#   Tier 0: Paperclip Sync (every 10 min) - Syncs Paperclip issues to AVS queue
+#   Tier 0: Queue Executor (every 15 min) - Selects one pending task
+#   Tier 1: Worker - Agents do the work (triggered via Paperclip cron)
+#   Tier 2: Verifier (every 10 min) - Validates task artifacts
+#   Tier 2: Theater Check (every 15 min) - Scans for theater patterns
+#   Tier 3: Meta-Monitor (every 30 min) - Checks system health
+#
+# Configure AVS installation (REQUIRED)
+AVS_HOME=/Users/serenerenze/bob-bootstrap/projects/agent-verification-system
+
+# Source production environment
+source $AVS_HOME/avs-production.env
+
+# === TIER 0: QUEUE MANAGEMENT ===
+
+# Sync Paperclip issues to AVS queue (every 10 minutes)
+*/10 * * * * cd $AVS_HOME && bash bin/avs-paperclip-sync >> /tmp/avs-paperclip-sync.log 2>&1
+
+# Select next pending task (every 15 minutes)
+*/15 * * * * cd $AVS_HOME && bash bin/queue-executor.sh >> /tmp/avs-executor.log 2>&1
+
+# Queue sync - match artifacts to tasks (every 15 minutes)
+*/15 * * * * cd $AVS_HOME && python3 lib/queue-sync-artifacts.py >> /tmp/avs-queue-sync.log 2>&1
+
+# === TIER 2: VERIFICATION ===
+
+# Verify recent task artifacts (every 10 minutes)
+*/10 * * * * cd $AVS_HOME && bash bin/verify-recent-tasks.sh >> /tmp/avs-verifier.log 2>&1
+
+# Theater pattern detection (every 15 minutes)
+# Scans completion artifacts for theater patterns
+*/15 * * * * cd $AVS_HOME && bash bin/avs-theater-verify-scan >> /tmp/avs-theater.log 2>&1
+
+# === TIER 3: META-MONITOR ===
+
+# System health check (every 30 minutes)
+*/30 * * * * cd $AVS_HOME && bash bin/check-system-health.sh >> /tmp/avs-meta-monitor.log 2>&1
+
+# Daily summary report (once per day at 9 AM)
+0 9 * * * cd $AVS_HOME && echo "AVS Daily Summary: $(date)" >> /tmp/avs-daily-summary.log 2>&1

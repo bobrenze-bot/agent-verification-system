@@ -1,0 +1,8 @@
+=== META-MONITOR HEALTH CHECK: 2026-03-13T19:00:24Z ===
+⚠️  ALERT: No worker artifacts in last 2 hours
+   Possible causes:
+   - No tasks scheduled
+   - Workers failing before writing artifacts
+   - System offline
+✓ Verifier activity: 1 runs in last 30min
+✓ Verifier accountability: 1 completion artifacts in last 30min
